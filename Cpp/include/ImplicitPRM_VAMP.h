@@ -29,9 +29,9 @@ namespace ompl
     namespace geometric
     {
         /**
-           @anchor gImplicitPRM
+           @anchor gImplicitPRMVamp
            @par Short description
-           ImplicitPRM is a planner that runs a standard lazy A* run on an implicit PRM graph:
+           ImplicitPRMVamp is a planner that runs a standard lazy A* run on an implicit PRM graph:
            this is a graph in which we don't explicitly build the entire graph, but in which
            we do know at every node who the node's neighbors are.
            This algorithm has two modes of operation.
@@ -41,6 +41,7 @@ namespace ompl
            (2) In LATTICE mode, we start off by defining a lattice generator for a lattice in
            {Zn, Dn*, An*}. After that, we use the regularity of the lattice as a way of informing
            the algorithm's of a sample's neighbors.
+           ### This version works on manipulators. For now, until the versions are united, this is separate.
            @par External documentation
            I. Panasoff and K. Solovey
            Effective Sampling for Robot Motion Planning Through the Lens of Lattices,
@@ -49,7 +50,7 @@ namespace ompl
         */
 
         /** \brief Lazy Probabilistic RoadMap planner */
-        class ImplicitPRM : public base::Planner
+        class ImplicitPRMVamp : public base::Planner
         {
         public:
             enum LatticeType {
@@ -150,12 +151,12 @@ namespace ompl
             using ConnectionFilter = std::function<bool (const Vertex &, const Vertex &)>;
 
             /** \brief Constructor */
-            explicit ImplicitPRM(const base::SpaceInformationPtr &si, bool starStrategy = false);
+            explicit ImplicitPRMVamp(const base::SpaceInformationPtr &si, bool starStrategy = false);
 
             /** \brief Constructor */
-            explicit ImplicitPRM(const base::PlannerData &data, bool starStrategy = false);
+            explicit ImplicitPRMVamp(const base::PlannerData &data, bool starStrategy = false);
 
-            ~ImplicitPRM() override;
+            ~ImplicitPRMVamp() override;
 
             /** \brief Set the maximum length of a motion to be added to the roadmap. */
             void setRange(double distance);
@@ -164,25 +165,6 @@ namespace ompl
             double getRange() const
             {
                 return maxDistance_;
-            }
-
-            std::string static latticeString(LatticeType type) {
-                switch (type) {
-                    case Zn:
-                        return "Zn";
-                    case DnStar:
-                        return "Dn*";
-                    case AnStar:
-                        return "An*";
-                    case Lc1:
-                        return "Lc1";
-                    case Lc2:
-                        return "Lc2";
-                    case Lc1b:
-                        return "Lc1b";
-                    default:
-                        return "NA";
-                }
             }
 
             /** \brief Set a different nearest neighbors datastructure */
@@ -279,25 +261,28 @@ namespace ompl
                 }
             }
 
+            /** \brief  return the mem-usage percentage*/
+            int checkMemory();
+
             int getStateCount() const {
                 return boost::num_vertices(g_);
             }
-
-            /** \brief  return the mem-usage percentage*/
-            int checkMemory();
 
             /** \brief set the start/goal eigen vectors, for the purpose of adding them to the tree explicitly  */
             void setStartAndGoalEigen(const Eigen::VectorXd& startEigen, const Eigen::VectorXd& goalEigen);
 
             static void changeAngleToQuaternion(double u1, double u2, double u3, base::SE3StateSpace::StateType* state);
-            void setBounds(const base::RealVectorBounds& mapExtent) {
-                mapExtent_ = base::RealVectorBounds(mapExtent);
-            }
+            // void setBounds(const base::RealVectorBounds& mapExtent) {
+                // mapExtent_ = base::RealVectorBounds(mapExtent);
+            // }
             void setAngleFix(const double& fix) {
                 angleFix_ = fix;
             }
-            void setRobotCount(int n) {
-                robotCount_ = n;
+            void setDim(int n) {
+                d_ = n;
+            }
+            void setVolume(double vol) {
+                volume_ = vol;
             }
             void setCountSamplesForRND(bool val) {
                 countSamplesForRND_ = val;
@@ -493,17 +478,17 @@ namespace ompl
                 return std::sqrt(res);
             }
 
-            double distSeparated(const Eigen::VectorXd& v1, const Eigen::VectorXd& v2, int d_) const {
-                double res = 0;
-                for (int w = 0; w < robotCount_; ++w) {
-                    double resTmp = 0.0;
-                    for (int i = 0; i < dimRd_; ++i) {
-                        resTmp += std::pow(v1[2*w + i] - v2[2*w + i], 2);
-                    }
-                    res += std::sqrt(resTmp);
-                }
-                return res;
-            }
+            // double distSeparated(const Eigen::VectorXd& v1, const Eigen::VectorXd& v2, int d_) const {
+            //     double res = 0;
+            //     for (int w = 0; w < robotCount_; ++w) {
+            //         double resTmp = 0.0;
+            //         for (int i = 0; i < dimRd_; ++i) {
+            //             resTmp += std::pow(v1[2*w + i] - v2[2*w + i], 2);
+            //         }
+            //         res += std::sqrt(resTmp);
+            //     }
+            //     return res;
+            // }
 
             static bool compareDoubles(double a, double b) {
                 return fabs(a - b) < DBL_EPSILON;
@@ -569,16 +554,10 @@ namespace ompl
                 const auto* aState = stateProperty_[a];
                 const auto* bState = stateProperty_[b];
                 double dist = 0.0;
-                for (int i = 0; i < robotCount_; ++i) {
-                    auto aX = aState->as<base::CompoundStateSpace::StateType>()->components[i]
-                                        ->as<base::SE2StateSpace::StateType>()->getX();
-                    auto aY = aState->as<base::CompoundStateSpace::StateType>()->components[i]
-                                    ->as<base::SE2StateSpace::StateType>()->getY();
-                    auto bX = bState->as<base::CompoundStateSpace::StateType>()->components[i]
-                        ->as<base::SE2StateSpace::StateType>()->getX();
-                    auto bY = bState->as<base::CompoundStateSpace::StateType>()->components[i]
-                                    ->as<base::SE2StateSpace::StateType>()->getY();
-                    dist += std::pow(aX - bX, 2) + std::pow(aY - bY, 2);
+                for (int i = 0; i < d_; ++i) {
+                    double v1 = aState->as<ompl::base::RealVectorStateSpace::StateType>()->values[i];
+                    double v2 = bState->as<ompl::base::RealVectorStateSpace::StateType>()->values[i];
+                    dist += std::pow(v1 - v2, 2);
                 }
                 return std::sqrt(dist);
             }
@@ -698,13 +677,13 @@ const base::PlannerTerminationCondition &ptc);
 
             // problem params
             base::RealVectorBounds mapExtent_;
-            int dimRd_; // dimension of the Rd part of the states (2,3)
             double angleFix_; // angle fix
             Eigen::VectorXd startEigen_;
             Eigen::VectorXd goalEigen_;
             base::State *workState_;
             // the type of space we deal with (currently support 3=>SE2, 6=>SE3)
-            int robotCount_;
+            int d_;
+            double volume_; // maximum length of a lattice base vector
             double maxEdge_; // maximum length of a lattice base vector
             RunResults results_;
             PrmType prmType_;

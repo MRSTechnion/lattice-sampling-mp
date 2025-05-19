@@ -50,7 +50,7 @@
 
 #include "GoalVisitor.hpp"
 
-#include "../include/ImplicitPRM.h"
+#include "../include/ImplicitPRM_VAMP.h"
 
 #include <ompl/base/spaces/SE2StateSpace.h>
 #include <ompl/base/spaces/SE3StateSpace.h>
@@ -86,8 +86,8 @@ namespace ompl
 
 #pragma region setup methods
 
-ompl::geometric::ImplicitPRM::ImplicitPRM(const base::SpaceInformationPtr &si, bool starStrategy)
-  : base::Planner(si, "ImplicitPRM")
+ompl::geometric::ImplicitPRMVamp::ImplicitPRMVamp(const base::SpaceInformationPtr &si, bool starStrategy)
+  : base::Planner(si, "ImplicitPRMVamp")
   , starStrategy_(starStrategy)
   , indexProperty_(boost::get(boost::vertex_index_t(), g_))
   , stateProperty_(boost::get(vertex_state_t(), g_))
@@ -95,11 +95,11 @@ ompl::geometric::ImplicitPRM::ImplicitPRM(const base::SpaceInformationPtr &si, b
   , vertexComponentProperty_(boost::get(vertex_component_t(), g_))
   , vertexValidityProperty_(boost::get(vertex_flags_t(), g_))
   , edgeValidityProperty_(boost::get(edge_flags_t(), g_))
-  , robotCount_(1)
+  , d_(1)
   , maxEdge_(0.0)
-  , mapExtent_(this->si_->getStateSpace()->as<ob::CompoundStateSpace>()->getSubspace(0) // first SE(2)
-                                      ->as<ob::CompoundStateSpace>()->getSubspace(0) // R^d component
-                                      ->as<ob::RealVectorStateSpace>()->getBounds()) // get bounds
+  , mapExtent_(this->si_->getStateSpace()->as<ob::RealVectorStateSpace>()->getBounds())
+                                      // ->as<ob::CompoundStateSpace>()->getSubspace(0) // R^d component
+                                      // ->as<ob::RealVectorStateSpace>()->getBounds()) // get bounds
   , sameRadius_(false)
   , countSamplesForRND_(false)
 {
@@ -107,15 +107,13 @@ ompl::geometric::ImplicitPRM::ImplicitPRM(const base::SpaceInformationPtr &si, b
     specs_.approximateSolutions = false;
     specs_.optimizingPaths = true;
 
-
-    dimRd_ = mapExtent_.low.size();
     angleFix_ = 1;
     workState_ = si_->allocState();
 
 
-    Planner::declareParam<double>("range", this, &ImplicitPRM::setRange, &ImplicitPRM::getRange, "0.:1.:10000.");
+    Planner::declareParam<double>("range", this, &ImplicitPRMVamp::setRange, &ImplicitPRMVamp::getRange, "0.:1.:10000.");
     if (!starStrategy_)
-        Planner::declareParam<unsigned int>("max_nearest_neighbors", this, &ImplicitPRM::setMaxNearestNeighbors,
+        Planner::declareParam<unsigned int>("max_nearest_neighbors", this, &ImplicitPRMVamp::setMaxNearestNeighbors,
                                             std::string("8:1000"));
 
     addPlannerProgressProperty("iterations INTEGER", [this]
@@ -136,8 +134,8 @@ ompl::geometric::ImplicitPRM::ImplicitPRM(const base::SpaceInformationPtr &si, b
                                });
 }
 
-ompl::geometric::ImplicitPRM::ImplicitPRM(const base::PlannerData &data, bool starStrategy)
-  : ImplicitPRM(data.getSpaceInformation(), starStrategy)
+ompl::geometric::ImplicitPRMVamp::ImplicitPRMVamp(const base::PlannerData &data, bool starStrategy)
+  : ImplicitPRMVamp(data.getSpaceInformation(), starStrategy)
 {
     if (data.numVertices() > 0)
     {
@@ -186,13 +184,13 @@ ompl::geometric::ImplicitPRM::ImplicitPRM(const base::PlannerData &data, bool st
     }
 }
 
-ompl::geometric::ImplicitPRM::~ImplicitPRM()
+ompl::geometric::ImplicitPRMVamp::~ImplicitPRMVamp()
 {
     si_->freeState(workState_);
     clear();
 };
 
-void ompl::geometric::ImplicitPRM::setup()
+void ompl::geometric::ImplicitPRMVamp::setup()
 {
     Planner::setup();
     tools::SelfConfig sc(si_, getName());
@@ -203,12 +201,7 @@ void ompl::geometric::ImplicitPRM::setup()
     if (!nn_)
     {
         nn_.reset(tools::SelfConfig::getDefaultNearestNeighbors<Vertex>(this));
-        // nn_->setDistanceFunction([this](const Vertex a, const Vertex b)
-                                 // {
-                                     // return distanceFunction(a, b);
-                                 // });
         nn_->setDistanceFunction([this](const Vertex a, const Vertex b) {
-            // return distanceFunction(a, b);
             return euclidDistanceFunction(a, b);
         });
 
@@ -244,7 +237,7 @@ void ompl::geometric::ImplicitPRM::setup()
         sampler_ = si_->allocStateSampler();
 }
 
-void ompl::geometric::ImplicitPRM::setRange(double distance)
+void ompl::geometric::ImplicitPRMVamp::setRange(double distance)
 {
     maxDistance_ = distance;
     if (!userSetConnectionStrategy_)
@@ -253,7 +246,7 @@ void ompl::geometric::ImplicitPRM::setRange(double distance)
         setup();
 }
 
-void ompl::geometric::ImplicitPRM::setMaxNearestNeighbors(unsigned int k)
+void ompl::geometric::ImplicitPRMVamp::setMaxNearestNeighbors(unsigned int k)
 {
     if (starStrategy_)
         throw Exception("Cannot set the maximum nearest neighbors for " + getName());
@@ -271,7 +264,7 @@ void ompl::geometric::ImplicitPRM::setMaxNearestNeighbors(unsigned int k)
         setup();
 }
 
-void ompl::geometric::ImplicitPRM::setDefaultConnectionStrategy()
+void ompl::geometric::ImplicitPRMVamp::setDefaultConnectionStrategy()
 {
     if (!nn_)
     {
@@ -288,20 +281,20 @@ void ompl::geometric::ImplicitPRM::setDefaultConnectionStrategy()
         connectionStrategy_ = KBoundedStrategy<Vertex>(magic::DEFAULT_NEAREST_NEIGHBORS_LAZY, maxDistance_, nn_);
 }
 
-void ompl::geometric::ImplicitPRM::setProblemDefinition(const base::ProblemDefinitionPtr &pdef)
+void ompl::geometric::ImplicitPRMVamp::setProblemDefinition(const base::ProblemDefinitionPtr &pdef)
 {
     Planner::setProblemDefinition(pdef);
     clearQuery();
 }
 
-void ompl::geometric::ImplicitPRM::clearQuery()
+void ompl::geometric::ImplicitPRMVamp::clearQuery()
 {
     startM_.clear();
     goalM_.clear();
     pis_.restart();
 }
 
-void ompl::geometric::ImplicitPRM::clearValidity()
+void ompl::geometric::ImplicitPRMVamp::clearValidity()
 {
     foreach (const Vertex v, boost::vertices(g_))
         vertexValidityProperty_[v] = VALIDITY_UNKNOWN;
@@ -309,7 +302,7 @@ void ompl::geometric::ImplicitPRM::clearValidity()
         edgeValidityProperty_[e] = VALIDITY_UNKNOWN;
 }
 
-void ompl::geometric::ImplicitPRM::clear()
+void ompl::geometric::ImplicitPRMVamp::clear()
 {
     Planner::clear();
     freeMemory();
@@ -322,7 +315,7 @@ void ompl::geometric::ImplicitPRM::clear()
     bestCost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
 }
 
-void ompl::geometric::ImplicitPRM::freeMemory()
+void ompl::geometric::ImplicitPRMVamp::freeMemory()
 {
     foreach (Vertex v, boost::vertices(g_))
         si_->freeState(stateProperty_[v]);
@@ -333,14 +326,15 @@ void ompl::geometric::ImplicitPRM::freeMemory()
 
 #pragma region Eigen funcs
 
-Eigen::VectorXd ompl::geometric::ImplicitPRM::StateToEigen(const ob::State* state) const {
-    int d_ = dimRd_ * robotCount_;
+Eigen::VectorXd ompl::geometric::ImplicitPRMVamp::StateToEigen(const ob::State* state) const {
+    // int d_ = dimRd_ * robotCount_;
     std::vector<double> vals;
-    for (int i = 0; i < robotCount_; ++i) {
-        vals.push_back(state->as<ob::CompoundStateSpace::StateType>()->components[i]
-                            ->as<ob::SE2StateSpace::StateType>()->getX());
-        vals.push_back(state->as<ob::CompoundStateSpace::StateType>()->components[i]
-                              ->as<ob::SE2StateSpace::StateType>()->getY());
+    for (int i = 0; i < d_; ++i) {
+        vals.push_back(state->as<ob::RealVectorStateSpace::StateType>()->values[i]);
+        // vals.push_back(state->as<ob::CompoundStateSpace::StateType>()->components[i]
+        //                     ->as<ob::SE2StateSpace::StateType>()->getX());
+        // vals.push_back(state->as<ob::CompoundStateSpace::StateType>()->components[i]
+        //                       ->as<ob::SE2StateSpace::StateType>()->getY());
     }
     Eigen::VectorXd res = Eigen::Map<Eigen::VectorXd, Eigen::Unaligned>(vals.data(), vals.size());
     return res;
@@ -370,20 +364,16 @@ static std::string EigenToString(const Eigen::VectorXi& v){
 
 #pragma region type==RANDOM
 
-void ompl::geometric::ImplicitPRM::AddAllVerticesWithNN() {
+void ompl::geometric::ImplicitPRMVamp::AddAllVerticesWithNN() {
     long sampleCount = 0;
-    if (prmType_ == LatticeWithNN) {
-        goOverSamples(startEigen_); // add all valid samples in the map
-    } else {
-        while (sampleCount++ < sampleLimit_) {
-            sampler_->sampleUniform(workState_);
-            auto newV = StateToEigen(workState_);
-            addMilestone(si_->cloneState(workState_), newV);
-        }
+    while (sampleCount++ < sampleLimit_) {
+        sampler_->sampleUniform(workState_);
+        auto newV = StateToEigen(workState_);
+        addMilestone(si_->cloneState(workState_), newV);
     }
 }
 
-Eigen::VectorXd ompl::geometric::ImplicitPRM::getValidStartState() {
+Eigen::VectorXd ompl::geometric::ImplicitPRMVamp::getValidStartState() {
     sampler_ = si_->allocStateSampler();
     sampler_->sampleUniform(workState_);
     while (!si_->isValid(workState_)) {
@@ -396,7 +386,7 @@ Eigen::VectorXd ompl::geometric::ImplicitPRM::getValidStartState() {
 
 #pragma region type==LATTICE
 
-void ompl::geometric::ImplicitPRM::setLatticeType(LatticeType type, double delta, double epsilon) {
+void ompl::geometric::ImplicitPRMVamp::setLatticeType(LatticeType type, double delta, double epsilon) {
     LatticeType_ = type;
     delta_ = delta;
     epsilon_ = epsilon;
@@ -404,8 +394,7 @@ void ompl::geometric::ImplicitPRM::setLatticeType(LatticeType type, double delta
     CreateLatticeParameters();
 }
 
-void ompl::geometric::ImplicitPRM::CreateLatticeParameters() {
-    int dim = dimRd_ * robotCount_;
+void ompl::geometric::ImplicitPRMVamp::CreateLatticeParameters() {
     double rescale_ = 0;
     std::vector<double> resses = {1};
     for (const auto& res: resses) {
@@ -417,17 +406,17 @@ void ompl::geometric::ImplicitPRM::CreateLatticeParameters() {
         resData_.back().r = resR;
         if (prmType_ == LatticeWithNN) r_ = resR;
         double resBeta = (resDelta * epsilon_) / std::sqrt(1 + pow(epsilon_, 2));
-        // the generator matrices are from the paper
+        // this transformation is from the paper
         switch (LatticeType_) {
             case File: {
                 break;
             }
             case Zn: {
-                rescale_ = (2 * resBeta) / sqrt(dim);
+                rescale_ = (2 * resBeta) / sqrt(d_);
                 // Zn rescaled generator
-                resData_.back().T = Eigen::MatrixXd(dim, dim);
-                for (int j = 0; j < dim; ++j) {
-                    for (int w = 0; w < dim; ++w) {
+                resData_.back().T = Eigen::MatrixXd(d_, d_);
+                for (int j = 0; j < d_; ++j) {
+                    for (int w = 0; w < d_; ++w) {
                         if (j == w) {
                             resData_.back().T(j, w) = roundDbl(rescale_);
                         } else {
@@ -438,16 +427,16 @@ void ompl::geometric::ImplicitPRM::CreateLatticeParameters() {
                 break;
             }
             case DnStar: {
-                if (dim % 2 == 0) {
-                    rescale_ = sqrt(8.0 / dim) * resBeta;
+                if (d_ % 2 == 0) {
+                    rescale_ = sqrt(8.0 / d_) * resBeta;
                 } else {
-                    rescale_ =  (4*resBeta) / sqrt(2.0 * dim - 1);
+                    rescale_ =  (4*resBeta) / sqrt(2.0 * d_ - 1);
                 }
                 // DnStar rescaled generator
-                resData_.back().T = Eigen::MatrixXd(dim, dim);
-                for (int j = 0; j < dim; ++j) {
-                    for (int w = 0; w < dim; ++w) {
-                        if (j < dim - 1) {
+                resData_.back().T = Eigen::MatrixXd(d_, d_);
+                for (int j = 0; j < d_; ++j) {
+                    for (int w = 0; w < d_; ++w) {
+                        if (j < d_ - 1) {
                             if (j == w) {
                                 resData_.back().T(j, w) = roundDbl(rescale_);
                             } else {
@@ -462,14 +451,14 @@ void ompl::geometric::ImplicitPRM::CreateLatticeParameters() {
                 break;
             }
             case AnStar: {
-                rescale_ = sqrt((12.0 * (dim + 1)) / (dim * (dim + 2))) * resBeta;
-                double anstar_x = 1.0 / (dim + 1 - sqrt(dim + 1));
+                rescale_ = sqrt((12.0 * (d_ + 1)) / (d_ * (d_ + 2))) * resBeta;
+                double anstar_x = 1.0 / (d_ + 1 - sqrt(d_ + 1));
                 // DnStar rescaled generator
-                resData_.back().T = Eigen::MatrixXd(dim, dim);
-                for (int j = 0; j < dim; ++j) {
-                    for (int w = 0; w < dim; ++w) {
+                resData_.back().T = Eigen::MatrixXd(d_, d_);
+                for (int j = 0; j < d_; ++j) {
+                    for (int w = 0; w < d_; ++w) {
                         if (j == 0) {
-                            if (w < dim - 1) {
+                            if (w < d_ - 1) {
                                 resData_.back().T(j, w) = roundDbl(rescale_);
                             } else {
                                 resData_.back().T(j, w) = roundDbl((rescale_ * (anstar_x - 1)));
@@ -477,7 +466,7 @@ void ompl::geometric::ImplicitPRM::CreateLatticeParameters() {
                         } else {
                             if (w == j - 1) {
                                 resData_.back().T(j, w) = roundDbl(-rescale_);
-                            } else if (w < dim - 1) {
+                            } else if (w < d_ - 1) {
                                 resData_.back().T(j, w) = 0;
                             } else {
                                 resData_.back().T(j, w) = roundDbl(rescale_ * anstar_x);
@@ -485,290 +474,23 @@ void ompl::geometric::ImplicitPRM::CreateLatticeParameters() {
                         }
                     }
                 }
-                break;
-            }
-            case AnStarReduced: {
-                rescale_ = sqrt((12.0 * (dim + 1)) / (dim * (dim + 2))) * resBeta;
-                double anstar_x = 1.0 / (dim + 1 - sqrt(dim + 1));
-                // DnStar rescaled generator
-                resData_.back().T = Eigen::MatrixXd(dim, dim);
-                for (int j = 0; j < dim; ++j) {
-                    for (int w = 0; w < dim; ++w) {
-                        if (j == 0) {
-                            if (w < dim - 1) {
-                                resData_.back().T(j, w) = roundDbl(rescale_);
-                            } else {
-                                resData_.back().T(j, w) = roundDbl((rescale_ * (anstar_x - 1)));
-                            }
-                        } else {
-                            if (w == j - 1) {
-                                resData_.back().T(j, w) = roundDbl(-rescale_);
-                            } else if (w < dim - 1) {
-                                resData_.back().T(j, w) = 0;
-                            } else {
-                                resData_.back().T(j, w) = roundDbl(rescale_ * anstar_x);
-                            }
-                        }
-                    }
-                }
-
-                // perform LLL reduction on a scaled-to-int version of the regular gram matrix
-                mat_ZZ reducedL_NTL;
-                int intFactor = 1000000;
-                reducedL_NTL.SetDims(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        reducedL_NTL[i][j] = to_ZZ(static_cast<int>(resData_.back().T(j, i) * intFactor));
-                    }
-                }
-                LLL_FP(reducedL_NTL);
-                // go back to the real result
-                Eigen::MatrixXd reducedL = Eigen::MatrixXd::Zero(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        reducedL(i, j) = static_cast<double>(to_int(reducedL_NTL[j][i])) / intFactor;
-                    }
-                }
-                // copy results
-                resData_.back().T = Eigen::MatrixXd(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        resData_.back().T(i, j) = reducedL(i, j);
-                    }
-                }
-                break;
-            }
-            case Lc2: {
-                double coverR = 1;
-                Eigen::MatrixXd M(dim, dim);
-                if (dim == 6) {
-                    // we have the GRAM matrix
-                    // L6 from the paper
-                     M << 1.9982, 0.5270, -0.4170, -0.5270, 0.5270, -1.0541,
-                          0.5270, 1.9982, -0.4170, -0.5270, 0.5270, -1.0541,
-                          -0.4170, -0.4170, 2.1082, -1.0541, -0.4170, 0.8341,
-                          -0.5270, -0.5270, -1.0541, 1.9982, -0.5270, -0.4170,
-                          0.5270, 0.5270, -0.4170, -0.5270, 1.9982, -1.0541,
-                          -1.0541, -1.0541, 0.8341, -0.4170, -1.0541, 2.1082;
-                    double density = 2.466125;
-                    double det = M.determinant();
-                    coverR = pow((density * sqrt(det)) / unitBallVol(dim), 2.0 / dim);
-                // } else if (dim == 8) {
-                //     // irrelevant stuff for testing
-                //     M <<
-                //         3.1917733003, -1.5938256841, -0.0000000000, 0.0000000000, -0.0000000000, -0.0000000000, -0.0000000000, 0.8051567063,
-                //         -1.5938256841, 1.9158885426, -1.1726527018, -0.0000000000, 0.0000000000, -0.0000000000, 0.0000000000, 0.0000004254,
-                //         -0.0000000000, -1.1726527018, 2.3453054037, -1.1726527018, 0.0000000000, -0.0000000000, -0.0000000000, 0.0000000000,
-                //         0.0000000000, -0.0000000000, -1.1726527018, 2.3453054037, -1.1726527018, -0.0000000000, -0.0000000000, 0.0000000000,
-                //         -0.0000000000, 0.0000000000, 0.0000000000, -1.1726527018, 2.3453054037, -1.1726527018, -0.0000000000, -0.0000000000,
-                //         -0.0000000000, -0.0000000000, -0.0000000000, -0.0000000000, -1.1726527018, 2.3453054037, -1.1726527018, 0.0000000000,
-                //         -0.0000000000, 0.0000000000, -0.0000000000, -0.0000000000, -0.0000000000, -1.1726527018, 2.3453054037, -0.0000000000,
-                //         0.8051567063, 0.0000004254, 0.0000000000, 0.0000000000, -0.0000000000, 0.0000000000, -0.0000000000, 1.6103149015;
-                //     double det = M.determinant();
-                //     coverR = 1.0;
-                // } else if (dim == 10) {
-                // // irrelevant stuff for testing
-                //     M <<  2.0408, -1.0204, 0, 0, 0, 0, 0, 0, 0, 0,
-                //           -1.0204, 2.0408, -1.0204, 0, 0, 0, 0, 0, -1.0204, 0,
-                //           0, -1.0204, 2.0408, -1.0204, 0, 0, 0, 0, 0, 1.0204,
-                //           0, 0, -1.0204, 2.0408, -1.0204, 0, 0, 0, 0, -1.0204,
-                //           0, 0, 0, -1.0204, 2.0408, -1.0204, 0, 0, 0, 1.0204,
-                //           0, 0, 0, 0, -1.0204, 2.0408, -1.0204, 0, 0, 0,
-                //           0, 0, 0, 0, 0, -1.0204, 2.0408, -1.0204, 0, 0,
-                //           0, 0, 0, 0, 0, 0, -1.0204, 2.0408, 0, -1.0204,
-                //           0, -1.0204, 0, 0, 0, 0, 0, 0, 1.6326, -1.0204,
-                //           0, 0, 1.0204, -1.0204, 1.0204, 0, 0, -1.0204, -1.0204, 3.0612;
-                //     double det = M.determinant();
-                //     coverR = 1.0;
-                }
-                // double coverR = 3.6399222478465464436606629511175356721;
-                rescale_ = coverR * resBeta;
-
-                Eigen::LLT<Eigen::MatrixXd> llt(M);
-                if (llt.info() != Eigen::Success) {
-                    std::cerr << "Cholesky decomposition failed. Matrix may not be SPD.\n";
-                }
-                std::cout << "Matrix A:\n" << M << "\n\n";
-
-                // Extract the lower triangular matrix L
-                Eigen::MatrixXd L = llt.matrixL();
-                // L.transposeInPlace();
-                L = L * rescale_;
-                std::cout << "Cholesky matrix L:\n" << L << "\n\n";
-                // get the LLL-reduced form
-                mat_ZZ reducedL_NTL;
-                int intFactor = 1000000;
-                reducedL_NTL.SetDims(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        reducedL_NTL[i][j] = to_ZZ(static_cast<int>(L(i, j) * intFactor));
-                        // reducedL_NTL[i][j] = to_ZZ(intFactor);
-                    }
-                }
-                // LLL(reducedL_NTL, 0, 1e-6);
-                LLL_FP(reducedL_NTL);
-
-                Eigen::MatrixXd reducedL = Eigen::MatrixXd::Zero(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        reducedL(i, j) = static_cast<double>(to_int(reducedL_NTL[i][j])) / intFactor;
-                    }
-                }
-
-                // Print results
-                std::cout << "Reduced L:\n" << reducedL << "\n";
-
-                // std::cout << "Redced L:\n" << reducedL_NTL << "\n";
-                resData_.back().T = Eigen::MatrixXd(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        resData_.back().T(i, j) = reducedL(i, j);
-                    }
-                }
-                resData_.back().T = resData_.back().T.transpose().eval();
-
-                // std::cout << "Reduced L:\n" << reducedL << "\n";
-                break;
-            }
-            case Lc1: {
-                double coverR = 1;
-                Eigen::MatrixXd M(dim, dim);
-                if (dim == 6) {
-                    // we have the GRAM matrix
-                    // L6 from the paper
-                    M <<  2.0550, -0.9424, 1.1126, 0.2747, -0.9424, -0.6153,
-                        -0.9424, 1.9227, -0.5773, -0.7681, 0.3651, -0.3651,
-                        1.1126, -0.5773, 2.0930, -0.4934, -0.5773, -0.9804,
-                        0.2747, -0.7681, -0.4934, 1.7550, -0.7681, 0.7681,
-                        -0.9424, 0.3651, -0.5773, -0.7681, 1.9227, -0.3651,
-                        -0.6153, -0.3651, -0.9804, 0.7681, -0.3651, 1.9227;
-                    std::cout << M << std::endl;
-                    double asdsad = (M * M.transpose()).determinant();
-                    double density = 2.464802;
-                    double det = M.determinant();
-                    coverR = pow((density * sqrt(det)) / unitBallVol(dim), 2.0 / dim);
-                    std::cout << density << "," << coverR << std::endl;
-                }
-                rescale_ = coverR * resBeta;
-                Eigen::LLT<Eigen::MatrixXd> llt(M);
-                if (llt.info() != Eigen::Success) {
-                    std::cerr << "Cholesky decomposition failed. Matrix may not be SPD.\n";
-                }
-                std::cout << "Matrix A:\n" << M << "\n\n";
-
-                // Extract the lower triangular matrix L
-                Eigen::MatrixXd L = llt.matrixL();
-                L = L * rescale_;
-                std::cout << "Cholesky matrix L:\n" << L << "\n\n";
-                // get the LLL-reduced form (making sure we use it on an integer matrix)
-                mat_ZZ reducedL_NTL;
-                int intFactor = 1000000;
-                reducedL_NTL.SetDims(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        reducedL_NTL[i][j] = to_ZZ(static_cast<int>(L(i, j) * intFactor));
-                    }
-                }
-                LLL_FP(reducedL_NTL);
-
-                Eigen::MatrixXd reducedL = Eigen::MatrixXd::Zero(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        reducedL(i, j) = static_cast<double>(to_int(reducedL_NTL[i][j])) / intFactor;
-                    }
-                }
-
-                // Print results
-                std::cout << "Reduced L:\n" << reducedL << "\n";
-
-                // std::cout << "Redced L:\n" << reducedL_NTL << "\n";
-                resData_.back().T = Eigen::MatrixXd(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        resData_.back().T(i, j) = reducedL(i, j);
-                    }
-                }
-                resData_.back().T = resData_.back().T.transpose().eval();
-                break;
-            }
-            case Lc1b: {
-                // this lattice is from the SITE, not the paper. it should be similar to Lc1.
-                double coverR = 1;
-                Eigen::MatrixXd M(dim, dim);
-                if (dim == 6) {
-                    // we have the GRAM matrix
-                    // L6 from the website
-                    M <<  6.38790917413146, 2.59193944942097, 3.59193944942097, 3.59193944942097, -1, 1.79596972471048,
-                    2.59193944942097, 8.79546262888381, 4.55496083132191, 4.55496083132191, 4.24050179756189, 2.27748041566095,
-                    3.59193944942097, 4.55496083132191, 7.79453203804591, 2.12481713085996, 2.43014370046194, 3.89726601902295,
-                    3.59193944942097, 4.55496083132191, 2.12481713085996, 7.79453203804591, 2.43014370046194, 3.89726601902295,
-                    -1, 4.24050179756189, 2.43014370046194, 2.43014370046194, 7.48007300428582, 4.04992930382394,
-                    1.79596972471048, 2.27748041566095, 3.89726601902295, 3.89726601902295, 4.04992930382394, 7.61834791669742;
-                    // double density = 2.464802;
-                    coverR = 3.6399222478465464436606629511175356721;
-                    M = M / (coverR);
-                    double det = M.determinant();
-                    coverR = 1;
-                    double density = unitBallVol(dim) * sqrt(pow(coverR, dim) / det);
-                    std::cout << density << std::endl;
-                }
-                rescale_ = coverR * resBeta;
-                Eigen::LLT<Eigen::MatrixXd> llt(M);
-                if (llt.info() != Eigen::Success) {
-                    std::cerr << "Cholesky decomposition failed. Matrix may not be SPD.\n";
-                }
-                std::cout << "Matrix A:\n" << M << "\n\n";
-
-                // Extract the lower triangular matrix L
-                Eigen::MatrixXd L = llt.matrixL();
-                L = L * rescale_;
-                std::cout << "Cholesky matrix L:\n" << L << "\n\n";
-                // get the LLL-reduced form
-                mat_ZZ reducedL_NTL;
-                int intFactor = 1000000;
-                reducedL_NTL.SetDims(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        reducedL_NTL[i][j] = to_ZZ(static_cast<int>(L(i, j) * intFactor));
-                    }
-                }
-                LLL_FP(reducedL_NTL);
-
-                Eigen::MatrixXd reducedL = Eigen::MatrixXd::Zero(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        reducedL(i, j) = static_cast<double>(to_int(reducedL_NTL[i][j])) / intFactor;
-                    }
-                }
-
-                // Print results
-                std::cout << "Reduced L:\n" << reducedL << "\n";
-
-                resData_.back().T = Eigen::MatrixXd(dim, dim);
-                for (int i = 0; i < dim; ++i) {
-                    for (int j = 0; j < dim; ++j) {
-                        resData_.back().T(i, j) = reducedL(i, j);
-                    }
-                }
-                resData_.back().T = resData_.back().T.transpose().eval();
                 break;
             }
         }
         std::cout << resData_.back().T << std::endl;
         maxEdge_ = 0; // TEMP
         OMPL_INFORM("Added LPRM Parameters: d=%d, R=%f,delta=%f,epsilon=%f",
-                    dim, resR, resDelta, epsilon_);
+                    d_, resR, resDelta, epsilon_);
     }
 }
 
-void ompl::geometric::ImplicitPRM::setStartAndGoalEigen(const Eigen::VectorXd &startEigen, const Eigen::VectorXd &goalEigen) {
+void ompl::geometric::ImplicitPRMVamp::setStartAndGoalEigen(const Eigen::VectorXd &startEigen, const Eigen::VectorXd &goalEigen) {
     startEigen_ = startEigen;
     goalEigen_ = goalEigen;
 }
 
 // count samples in the ball, but ignore bounds so you dont miss points while doing the BFS
-void ompl::geometric::ImplicitPRM::setSamplesInBallNoBoundsRes(int id, Eigen::VectorXd &root) {
-    int d_ = dimRd_ * robotCount_;
+void ompl::geometric::ImplicitPRMVamp::setSamplesInBallNoBoundsRes(int id, Eigen::VectorXd &root) {
     std::vector<LatticeNN> open;
     std::vector<LatticeNN> openTemp;
     std::unordered_map<Eigen::VectorXi, int, matrix_hashI<Eigen::VectorXi>, TVectorEqualsI> visited;
@@ -782,8 +504,6 @@ void ompl::geometric::ImplicitPRM::setSamplesInBallNoBoundsRes(int id, Eigen::Ve
 
     const auto& T = resData_[id].T;
     const auto r = resData_[id].r;
-    std::cout << "Using the following generator matrix:" << std::endl;
-    std::cout << T << std::endl;
 
     while (!open.empty() || !openTemp.empty()) {
         if (open.empty()) {
@@ -825,14 +545,14 @@ void ompl::geometric::ImplicitPRM::setSamplesInBallNoBoundsRes(int id, Eigen::Ve
     }
 }
 
-// count samples in the entire map bounds
-long ompl::geometric::ImplicitPRM::countSamplesInMapBounds(int id, Eigen::VectorXd &root) {
-    int d_ = dimRd_ * robotCount_;
+long ompl::geometric::ImplicitPRMVamp::countSamplesInMapBounds(int id, Eigen::VectorXd &root) {
+    // int d_ = dimRd_ * robotCount_;
     std::vector<LatticeNN> open;
     std::vector<LatticeNN> openTemp;
     std::unordered_map<Eigen::VectorXi, int, matrix_hashI<Eigen::VectorXi>, TVectorEqualsI> visited;
+    // Use this dict if you want to see the good samples, and not just count them
+    // std::unordered_map<Eigen::VectorXi, int, matrix_hashI<Eigen::VectorXi>, TVectorEqualsI> good;
     long samples = 1;
-    int power = 2;
     // add root
     Eigen::VectorXi currI = Eigen::VectorXi::Zero(d_);
     visited[currI] = 0;
@@ -840,8 +560,10 @@ long ompl::geometric::ImplicitPRM::countSamplesInMapBounds(int id, Eigen::Vector
 
     const auto& T = resData_[id].T;
 
-    // std::cout << T << std::endl;
+    std::cout << EigenToString(root) << std::endl;
 
+    // std::cout << T << std::endl;
+    maxEdge_ = 2 * M_PI;
     while (!open.empty() || !openTemp.empty()) {
         if (open.empty()) {
             // we have the next wave of neighbors
@@ -863,34 +585,28 @@ long ompl::geometric::ImplicitPRM::countSamplesInMapBounds(int id, Eigen::Vector
                         visited.erase(newNeighborI);
                 } else {
                     visited[newNeighborI] = 1;
-
-                    bool inAreaBigger = true;
-                    // is it in the rectangle
-                    for (int w = 0; w < d_; ++w) {
-                        inAreaBigger = inAreaBigger && (
-                            (newNeighbor[w] > mapExtent_.low[w % dimRd_] - maxEdge_
-                                || compareDoubles(newNeighbor[w], mapExtent_.low[w  % dimRd_] - maxEdge_)) &&
-                            (newNeighbor[w] < mapExtent_.high[w % dimRd_] + maxEdge_
-                                || compareDoubles(newNeighbor[w], mapExtent_.high[w  % dimRd_] + maxEdge_)));
-                    }
                     bool inArea = true;
-                    // is it in the rectangle
-                    for (int w = 0; w < d_; ++w) {
-                        inArea = inArea && (
-                            (newNeighbor[w] > mapExtent_.low[w % dimRd_]
-                                || compareDoubles(newNeighbor[w], mapExtent_.low[w  % dimRd_])) &&
-                            (newNeighbor[w] < mapExtent_.high[w % dimRd_]
-                                || compareDoubles(newNeighbor[w], mapExtent_.high[w  % dimRd_])));
+                    for (int i = 0; i < 7; ++i) {
+                        double value = newNeighbor[i];
+                        if (i == 3) {
+                            inArea = inArea && (value > -3.15 && value < 0.09);
+                        } else if (i == 5) {
+                            inArea = inArea && (value > -0.09 && value < 3.85);
+                        } else {
+                            // res = res && (abs(value) < 1.1 * M_PI);
+                            inArea = inArea && (abs(value) < 1.1 * M_PI);
+                        }
                     }
                     if (inArea) {
                         samples++;
+                        // good[newNeighborI] = 1;
                         // uncomment this if you want to see the sample count
                         // if (samples % 1000 == 0) std::cout << samples << std::endl;
                     }
                     // we need to explore all space, regardless of collisions.
                     // some samples may be "isolated" in terms of direct connection to another
                     // sample, but in a PRM r-ball they may end up connecting.
-                    if (inAreaBigger) {
+                    if (inArea) {
                         openTemp.push_back({
                             newNeighbor, newNeighborI, 0
                         });
@@ -899,6 +615,10 @@ long ompl::geometric::ImplicitPRM::countSamplesInMapBounds(int id, Eigen::Vector
             }
         }
     }
+    // for (const auto& elem: good) {
+        // std::cout << "sampleI = " << EigenToString(elem.first) << std::endl;
+    // }
+
     return samples;
 }
 
@@ -906,24 +626,14 @@ long ompl::geometric::ImplicitPRM::countSamplesInMapBounds(int id, Eigen::Vector
 
 #pragma region the algorithm
 
-ob::State* ompl::geometric::ImplicitPRM::createNewState(Eigen::VectorXd& newV) {
-    if (dimRd_ == 2) {
-        for (int i = 0; i < robotCount_; ++i) {
-            workState_->as<ob::CompoundStateSpace::StateType>()->components[i]
-            ->as<ob::SE2StateSpace::StateType>()->setXY(newV[2*i], newV[2*i+1]);
-            workState_->as<ob::CompoundStateSpace::StateType>()->components[i]
-            ->as<ob::SE2StateSpace::StateType>()->setYaw(0);
-        }
-    } else if (dimRd_ == 3) {
-        for (int i = 0; i < robotCount_; ++i) {
-            workState_->as<ob::SE3StateSpace::StateType>()->setXYZ(newV[3*i], newV[3*i+1], newV[3*i+2]);
-            changeAngleToQuaternion(0, 0, 0, workState_->as<ob::SE3StateSpace::StateType>());
-        }
+ob::State* ompl::geometric::ImplicitPRMVamp::createNewState(Eigen::VectorXd& newV) {
+    for (int i = 0; i < d_; ++i) {
+        workState_->as<ob::RealVectorStateSpace::StateType>()->values[i] = newV[i];
     }
     return si_->cloneState(workState_);
 }
 
-void ompl::geometric::ImplicitPRM::changeAngleToQuaternion(double u1, double u2, double u3, ob::SE3StateSpace::StateType* state) {
+void ompl::geometric::ImplicitPRMVamp::changeAngleToQuaternion(double u1, double u2, double u3, ob::SE3StateSpace::StateType* state) {
     // first create the quaternion (similar to the nasa one, but different order. from ompl_app.py).
     state->rotation().w = std::cos(0.5*u1) * std::cos(0.5*u2) * std::cos(0.5*u3) -
         std::sin(0.5*u1) * std::sin(0.5*u2) * std::sin(0.5*u3);
@@ -935,27 +645,17 @@ void ompl::geometric::ImplicitPRM::changeAngleToQuaternion(double u1, double u2,
         std::sin(0.5*u1) * std::sin(0.5*u2) * std::cos(0.5*u3);
 }
 
-ompl::geometric::ImplicitPRM::Vertex ompl::geometric::ImplicitPRM::addMilestone(base::State *state, Eigen::VectorXd& newV)
+ompl::geometric::ImplicitPRMVamp::Vertex ompl::geometric::ImplicitPRMVamp::addMilestone(base::State *state, Eigen::VectorXd& newV)
 {
     if (state == nullptr) {
         // create the state
-        if (dimRd_ == 2) {
-            for (int i = 0; i < robotCount_; ++i) {
-                workState_->as<ob::CompoundStateSpace::StateType>()->components[i]
-                          ->as<ob::SE2StateSpace::StateType>()->setXY(newV[2*i], newV[2*i+1]);
-                workState_->as<ob::CompoundStateSpace::StateType>()->components[i]
-                          ->as<ob::SE2StateSpace::StateType>()->setYaw(0);
-            }
-        } else if (dimRd_ == 3) {
-            for (int i = 0; i < robotCount_; ++i) {
-                workState_->as<ob::SE3StateSpace::StateType>()->setXYZ(newV[3*i], newV[3*i+1], newV[3*i+2]);
-                changeAngleToQuaternion(0, 0, 0, workState_->as<ob::SE3StateSpace::StateType>());
-            }
+        for (int i = 0; i < d_; ++i) {
+            workState_->as<ob::RealVectorStateSpace::StateType>()->values[i] = newV[i];
         }
         // allocate it
         state = si_->cloneState(workState_);
     }
-
+    // is it valid?
     Vertex m = nullptr;
     m = boost::add_vertex(g_);
     stateProperty_[m] = state;
@@ -970,7 +670,7 @@ ompl::geometric::ImplicitPRM::Vertex ompl::geometric::ImplicitPRM::addMilestone(
     return m;
 }
 
-ompl::base::PlannerStatus ompl::geometric::ImplicitPRM::solve(const base::PlannerTerminationCondition &ptc)
+ompl::base::PlannerStatus ompl::geometric::ImplicitPRMVamp::solve(const base::PlannerTerminationCondition &ptc)
 {
     checkValidity();
     auto *goal = dynamic_cast<base::GoalSampleableRegion *>(pdef_->getGoal().get());
@@ -1020,9 +720,11 @@ ompl::base::PlannerStatus ompl::geometric::ImplicitPRM::solve(const base::Planne
     base::PathPtr bestSolution;
     unsigned int optimizingComponentSegments = 0;
     // add all valid vertices and ALL edges
+    std::cout << T_ << std::endl;
     const long int solComponent = solutionComponent(&startGoalPair);
     Vertex startV = startM_[startGoalPair.first];
     Vertex goalV = goalM_[startGoalPair.second];
+    // base::PathPtr solution = constructSolutionImplicitly(startV, goalV, ptc);
     base::PathPtr solution = constructSolutionImplicitly(startV, goalV, ptc);
     if (solution)
     {
@@ -1044,7 +746,7 @@ ompl::base::PlannerStatus ompl::geometric::ImplicitPRM::solve(const base::Planne
     return bestSolution ? base::PlannerStatus::EXACT_SOLUTION : base::PlannerStatus::TIMEOUT;
 }
 
-void ompl::geometric::ImplicitPRM::uniteComponents(Vertex a, Vertex b)
+void ompl::geometric::ImplicitPRMVamp::uniteComponents(Vertex a, Vertex b)
 {
     unsigned long int componentA = vertexComponentProperty_[a];
     unsigned long int componentB = vertexComponentProperty_[b];
@@ -1058,7 +760,7 @@ void ompl::geometric::ImplicitPRM::uniteComponents(Vertex a, Vertex b)
     markComponent(a, componentB);
 }
 
-void ompl::geometric::ImplicitPRM::markComponent(Vertex v, unsigned long int newComponent)
+void ompl::geometric::ImplicitPRMVamp::markComponent(Vertex v, unsigned long int newComponent)
 {
     std::queue<Vertex> q;
     q.push(v);
@@ -1081,7 +783,7 @@ void ompl::geometric::ImplicitPRM::markComponent(Vertex v, unsigned long int new
     }
 }
 
-long int ompl::geometric::ImplicitPRM::solutionComponent(std::pair<std::size_t, std::size_t> *startGoalPair) const
+long int ompl::geometric::ImplicitPRMVamp::solutionComponent(std::pair<std::size_t, std::size_t> *startGoalPair) const
 {
     for (std::size_t startIndex = 0; startIndex < startM_.size(); ++startIndex)
     {
@@ -1099,12 +801,12 @@ long int ompl::geometric::ImplicitPRM::solutionComponent(std::pair<std::size_t, 
     return -1;
 }
 
-ompl::base::Cost ompl::geometric::ImplicitPRM::costHeuristic(Vertex u, Vertex v) const
+ompl::base::Cost ompl::geometric::ImplicitPRMVamp::costHeuristic(Vertex u, Vertex v) const
 {
     return opt_->motionCostHeuristic(stateProperty_[u], stateProperty_[v]);
 }
 
-void ompl::geometric::ImplicitPRM::getPlannerData(base::PlannerData &data) const
+void ompl::geometric::ImplicitPRMVamp::getPlannerData(base::PlannerData &data) const
 {
     Planner::getPlannerData(data);
 
@@ -1132,15 +834,17 @@ void ompl::geometric::ImplicitPRM::getPlannerData(base::PlannerData &data) const
     }
 }
 
-ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitly(const Vertex &start, const Vertex &goal,
+ompl::base::PathPtr ompl::geometric::ImplicitPRMVamp::constructSolutionImplicitly(const Vertex &start, const Vertex &goal,
     const base::PlannerTerminationCondition &ptc) {
     if (prmType_ == Lattice) {
         return constructSolutionImplicitlyLattice(start, goal, ptc);
+        // return constructSolutionImplicitlyLattice2(start, goal, ptc);
+        // return constructSolutionImplicitlyLatticeRessed(start, goal, ptc);
     }
     return constructSolutionImplicitlyRND(start, goal, ptc);
 }
 
-int ompl::geometric::ImplicitPRM::checkMemory() {
+int ompl::geometric::ImplicitPRMVamp::checkMemory() {
     sysinfo (&memInfo);
 
     long long totalVirtualMem = memInfo.totalram;
@@ -1157,14 +861,14 @@ int ompl::geometric::ImplicitPRM::checkMemory() {
     return memUsage;
 }
 
-ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyLattice(const Vertex &start, const Vertex &goal,
+ompl::base::PathPtr ompl::geometric::ImplicitPRMVamp::constructSolutionImplicitlyLattice(const Vertex &start, const Vertex &goal,
                                                                                      const base::PlannerTerminationCondition &ptc) {
     std::unordered_map<Eigen::VectorXi, EigenAstar*, matrix_hashI<Eigen::VectorXi>, TVectorEqualsI> VISITED;
     std::unordered_map<Eigen::VectorXi, bool, matrix_hashI<Eigen::VectorXi>, TVectorEqualsI> INVALID;
-    std::unordered_map<Eigen::VectorXd, bool, matrix_hash<Eigen::VectorXd>, TVectorEquals> INVALID_RND;
+    std::unordered_map<Eigen::VectorXi, bool, matrix_hashI<Eigen::VectorXi>, TVectorEqualsI> INVALID_RND;
     std::unordered_map<EigenAstar*, EigenAstar*> PREV;
     std::vector<EigenAstar*> OPEN;
-    int d_ = dimRd_ * robotCount_;
+
     auto compareEigens = TVectorEquals();
     // init the root node
     auto rootI = Eigen::VectorXi::Zero(d_);
@@ -1196,10 +900,8 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyLat
     OMPL_INFORM("Running A* on the implicit graph to find a solution");
     TVectorEqualsI eigenComp;
 
-    // auto tCurr = std::chrono::high_resolution_clock::now();
-    // auto tLast = tConstructionEnd;
     while (!OPEN.empty() && !ptc) {
-        // Option to stop run according to mem usage
+        // uncomment below to limit mem usage
         // tCurr = std::chrono::high_resolution_clock::now();
         // if (duration_cast<std::chrono::seconds>(tCurr - tLast).count() > 2) {
         //     int memUsage = checkMemory();
@@ -1213,16 +915,13 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyLat
         std::ranges::pop_heap(OPEN, EigenGT());
         EigenAstar* minV = OPEN.back();
         OPEN.pop_back();
-        Eigen::VectorXd minVeigen = StateToEigen(minV->state);
         // have we reached the goal?
-        if (compareEigens(minVeigen, goalEigen_)) {
+        if (compareEigens(minV->sample, goalEigen_)) {
             std::vector<const base::State*> resVec;
             results_.length = 0;
-            results_.lengthSeparated = 0;
             while (PREV[minV] != nullptr) {
                 resVec.push_back(minV->state);
                 results_.length += distEuclid(StateToEigen(minV->state), StateToEigen(PREV[minV]->state), d_);
-                results_.lengthSeparated += distSeparated(StateToEigen(minV->state), StateToEigen(PREV[minV]->state), d_);
                 minV = PREV[minV];
             }
             resVec.push_back(minV->state);
@@ -1236,11 +935,11 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyLat
         int i = 0;
         // is the goal near?
         bool checkGoal = false;
-        if (distEuclid(minVeigen, goalEigen_, d_) < resData_[i].r) {
+        if (distEuclid(minV->sample, goalEigen_, d_) < resData_[i].r) {
             checkGoal = true;
             resData_[i].neighbors.push_back({
-                goalEigen_ - minVeigen, Eigen::VectorXi::Ones(d_) * INT_MAX,
-                distEuclid(goalEigen_, minVeigen,d_), true});
+                goalEigen_ - minV->sample, Eigen::VectorXi::Ones(d_) * INT_MAX,
+                distEuclid(goalEigen_, minV->sample,d_), true});
         }
         for (auto neighbor: resData_[i].neighbors) {
             if (ptc) break;
@@ -1252,11 +951,29 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyLat
             if (!neighbor.isGoal && INVALID.contains(neighbor.sampleI)
                 && INVALID[neighbor.sampleI] == true) continue;
             auto neigbhorState = this->createNewState(neighbor.sample);
+
             if (!si_->isValid(neigbhorState)) {
-                si_->freeState(neigbhorState);
                 INVALID[neighbor.sampleI] = true;
+
+                // check if this is redundant in the next version
+                bool res = true;
+                for (int i = 0; i < 7; ++i) {
+                    double value = neigbhorState->as<ob::RealVectorStateSpace::StateType>()->values[i];
+                    if (i == 3) {
+                        res = res && (value > -3.15 && value < 0.09);
+                    } else if (i == 5) {
+                        res = res && (value > -0.09 && value < 3.85);
+                    } else {
+                        res = res && (abs(value) < 1.1 * M_PI);
+                    }
+                }
+                if (res) INVALID_RND[neighbor.sampleI] = true;
+
+                si_->freeState(neigbhorState);
+
                 continue; // vertex in collision
             }
+
             bool isEdgeValid = si_->checkMotion(minV->state, neigbhorState);
             si_->freeState(neigbhorState);
             if (!isEdgeValid) continue; // edge in collision
@@ -1294,7 +1011,13 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyLat
         }
         if (checkGoal) resData_[i].neighbors.pop_back();
     }
+    // if you want to see the samples.
+    // for (const auto& elem: VISITED) {
+        // std::cout << "sampleI = " << EigenToString(elem.first) << std::endl;
+    // }
     std::cout << "size of visited=" << VISITED.size() << std::endl;
+    std::cout << "size of invalid=" << INVALID.size() << std::endl;
+    std::cout << "size of invalid_in_bounds=" << INVALID_RND.size() << std::endl;
     auto tAstarEnd = std::chrono::high_resolution_clock::now();
     results_.astarTime =
         duration_cast<std::chrono::microseconds>(tAstarEnd - tConstructionEnd).count();
@@ -1308,34 +1031,33 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyLat
     for (auto iter = VISITED.begin(); iter != VISITED.end(); ++iter) {
         freeEigenstarNode(iter->second);
     }
+    if (LatticeType_ == AnStar) {
+        OMPL_INFORM("AnStar: counting total samples.");
+        // if (countSamplesForRND_) {
+            // if (robotCount_ >= 6) {
+            //     double mapSide = mapExtent_.high[0] - mapExtent_.low[0];
+            //     // upper bound estimation
+            //     results_.samples = resData_[0].neighbors.size() * std::pow((mapSide * std::sqrt(2)) / (resData_[0].r), robotCount_);
+            // } else {
+            results_.samples = this->countSamplesInMapBounds(0, startEigen_);
+            // }
+        // }
+        OMPL_INFORM("AnStar: counting total samples done, got %d samples.", results_.samples);
+    }
     if (pathFound) {
         OMPL_INFORM("Path found!");
-        if (LatticeType_ == AnStar) {
-            OMPL_INFORM("AnStar: counting total samples.");
-            if (countSamplesForRND_) {
-                // more then d>=6 takes too long to calc explicitly
-                if (robotCount_ >= 6) {
-                    double mapSide = mapExtent_.high[0] - mapExtent_.low[0];
-                    // upper bound estimation
-                    results_.samples = resData_[0].neighbors.size() * std::pow((mapSide * std::sqrt(2)) / (resData_[0].r), robotCount_);
-                } else {
-                    results_.samples = this->countSamplesInMapBounds(0, startEigen_);
-                }
-            }
-            OMPL_INFORM("AnStar: counting total samples done, got %d samples.", results_.samples);
-        }
         return p;
     }
     return nullptr;
 }
 
-ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyRND(const Vertex &start, const Vertex &goal,
+ompl::base::PathPtr ompl::geometric::ImplicitPRMVamp::constructSolutionImplicitlyRND(const Vertex &start, const Vertex &goal,
                                                                                  const base::PlannerTerminationCondition &ptc) {
     std::unordered_map<Vertex, EigenAstarRND*> VISITED;
     std::unordered_map<Vertex, bool> INVALID;
     std::unordered_map<EigenAstarRND*, EigenAstarRND*> PREV;
     std::vector<EigenAstarRND*> OPEN;
-    int d_ = dimRd_ * robotCount_;
+    // int d_ = dimRd_ * robotCount_;
     auto compareEigens = TVectorEquals();
     // init the root node
     auto root = start;
@@ -1351,12 +1073,13 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyRND
     OMPL_INFORM("Constructing the random points and creating a NN structure.");
     // if we are using a RND set, define the PRM* radius
     if (prmType_ == Random && !sameRadius_) { // remove the "false", this is temp
-        double mapVolume = 1;
-        for (int i = 0; i < d_; ++i) {
-            mapVolume *= (mapExtent_.high[i % dimRd_] - mapExtent_.low[i % dimRd_]);
-        }
+        // double mapVolume = 1;
+        // for (int i = 0; i < d_; ++i) {
+        //     // mapVolume *= (mapExtent_.high[i % dimRd_] - mapExtent_.low[i % dimRd_]);
+        //     mapVolume *= 2*M_PI;
+        // }
         double unitBallVolume = (1.0 / std::sqrt(d_ * M_PI)) * std::pow((2*M_PI*M_E)/d_, d_ / 2.0);
-        r_ = 2 * std::pow((1.0 + (1.0 / d_)) * (mapVolume / unitBallVolume) * (std::log(sampleLimit_)/sampleLimit_),(1.0/d_));
+        r_ = 2 * std::pow((1.0 + (1.0 / d_)) * (volume_ / unitBallVolume) * (std::log(sampleLimit_)/sampleLimit_),(1.0/d_));
     }
     OMPL_INFORM("Using radius=%f", r_);
     // now add elements to the NN structure
@@ -1374,7 +1097,6 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyRND
     auto tCurr = std::chrono::high_resolution_clock::now();
     auto tLast = tConstructionEnd;
     while (!OPEN.empty() && !ptc) {
-        // Option to stop run according to mem usage
         // tCurr = std::chrono::high_resolution_clock::now();
         // if (duration_cast<std::chrono::seconds>(tCurr - tLast).count() > 2) {
         //     int memUsage = checkMemory();
@@ -1388,16 +1110,17 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyRND
         std::ranges::pop_heap(OPEN, EigenGT_RND());
         EigenAstarRND* minV = OPEN.back();
         OPEN.pop_back();
-        Eigen::VectorXd minVeigen = StateToEigen(minV->state);
+        // Eigen::VectorXd minVeigen = StateToEigen(minV->state);
+        // OMPL_INFORM("6");
         // have we reached the goal?
-        if (compareEigens(minVeigen, goalEigen_)) {
+        if (compareEigens(minV->sample, goalEigen_)) {
             std::vector<const base::State*> resVec;
             results_.length = 0;
             results_.lengthSeparated = 0;
             while (PREV[minV] != nullptr) {
                 resVec.push_back(minV->state);
                 results_.length += distEuclid(StateToEigen(minV->state), StateToEigen(PREV[minV]->state), d_);
-                results_.lengthSeparated += distSeparated(StateToEigen(minV->state), StateToEigen(PREV[minV]->state), d_);
+                // results_.lengthSeparated += distSeparated(StateToEigen(minV->state), StateToEigen(PREV[minV]->state), d_);
                 minV = PREV[minV];
             }
             resVec.push_back(minV->state);
@@ -1408,25 +1131,37 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyRND
             pathFound = true;
             break;
         }
+        // OMPL_INFORM("7");
         std::vector<Vertex> neighborsV;
         nn_->nearestR(EigenVecToVertex_[StateToEigen(minV->state)], r_, neighborsV);
+        // OMPL_INFORM("8");
         for (const auto& neighborV: neighborsV) {
             auto neighborEigen = StateToEigen(stateProperty_[neighborV]);
             neighborsRND_.push_back({
                 neighborEigen, neighborV,
-                distEuclid(neighborEigen, minVeigen, d_), false
+                distEuclid(neighborEigen, minV->sample, d_), false
             });
         }
+        // OMPL_INFORM("9");
 
         // is the goal near?
         bool checkGoal = false;
-        if (distEuclid(minVeigen, goalEigen_, d_) < r_) {
+        if (distEuclid(minV->sample, goalEigen_, d_) < r_) {
             checkGoal = true;
             neighborsRND_.push_back({
                 goalEigen_, goal,
-                distEuclid(goalEigen_, minVeigen,d_), true});
+                distEuclid(goalEigen_, minV->sample,d_), true});
         }
+        // OMPL_INFORM("10");
         for (auto neighbor: neighborsRND_) {
+            // tCurr = std::chrono::high_resolution_clock::now();
+            // if (duration_cast<std::chrono::seconds>(tCurr - tLast).count() > 2) {
+            //     OMPL_INFORM("2");
+            //     int memUsage = checkMemory();
+            //     OMPL_INFORM("3");
+            //     tLast = tCurr;
+            //     std::cout << memUsage << std::endl;
+            // }
             if (ptc) break;
             // vertex/edge validity checking
             if (!neighbor.isGoal && INVALID.contains(neighbor.sampleV)
@@ -1496,84 +1231,16 @@ ompl::base::PathPtr ompl::geometric::ImplicitPRM::constructSolutionImplicitlyRND
     return nullptr;
 }
 
-void ompl::geometric::ImplicitPRM::freeEigenstarNode(EigenAstar* node) {
+void ompl::geometric::ImplicitPRMVamp::freeEigenstarNode(EigenAstar* node) {
     // if (sanityCheckMode_) si_->freeState(node->state); //in Random mode, all states are released already
     si_->freeState(node->state); //in Random mode, all states are released already
     delete node;
 }
 
-void ompl::geometric::ImplicitPRM::freeEigenstarRndNode(EigenAstarRND* node) {
+void ompl::geometric::ImplicitPRMVamp::freeEigenstarRndNode(EigenAstarRND* node) {
     // if (!sanityCheckMode_) si_->freeState(node->state); //in Random mode, all states are released already
     si_->freeState(node->state); //in Random mode, all states are released already
     delete node;
-}
-
-void ompl::geometric::ImplicitPRM::goOverSamples(Eigen::VectorXd& root) {
-    int d_ = dimRd_ * robotCount_;
-    std::vector<LatticeNN> open;
-    std::vector<LatticeNN> openTemp;
-    std::unordered_map<Eigen::VectorXi, int, matrix_hashI<Eigen::VectorXi>, TVectorEqualsI> visited;
-    long samples = 1;
-    int power = 2;
-    // add root
-    Eigen::VectorXi currI = Eigen::VectorXi::Zero(d_);
-    visited[currI] = 0;
-    open.push_back({root, currI, 0});
-    int id = 0;
-
-    const auto& T = resData_[id].T;
-    const auto r = resData_[id].r;
-
-    std::cout << T << std::endl;
-
-    while (!open.empty() || !openTemp.empty()) {
-        if (open.empty()) {
-            // we have the next wave of neighbors
-            open = openTemp;
-            openTemp.clear();
-        }
-        const auto [sample, sampleI, g, isGoal] = open[open.size() - 1];
-        open.pop_back();
-        int sign = -1;
-        for (int j = 0; j < 2; ++j) {
-            sign = -sign;
-            for (int i = 0; i < d_; ++i) {
-                Eigen::VectorXd newNeighbor = sample + sign * T.col(i);
-                Eigen::VectorXi newNeighborI = sampleI;
-                newNeighborI[i] += sign;
-                if (visited.contains(newNeighborI) && visited[newNeighborI] < 2*d_) {
-                    visited[newNeighborI]++;
-                    if (visited[newNeighborI] == 2 * d_)
-                        visited.erase(newNeighborI);
-                } else {
-                    visited[newNeighborI] = 1;
-
-                    bool inArea = true;
-                    // is it in the rectangle
-                    for (int w = 0; w < d_; ++w) {
-                        inArea = inArea && (
-                            (newNeighbor[w] > mapExtent_.low[w % dimRd_] - maxEdge_
-                                || compareDoubles(newNeighbor[w], mapExtent_.low[w  % dimRd_] - maxEdge_)) &&
-                            (newNeighbor[w] < mapExtent_.high[w % dimRd_] + maxEdge_
-                                || compareDoubles(newNeighbor[w], mapExtent_.high[w  % dimRd_] + maxEdge_)));
-                    }
-
-                    if (inArea) {
-                        Vertex neighborV = addMilestone(nullptr, newNeighbor);
-                        // we need to explore all space, regardless of collisions.
-                        // some samples may be "isolated" in terms of direct connection to another
-                        // sample, but in a PRM r-ball they may end up connecting.
-                        // neighborsRND_.push_back({newNeighbor, neighborV,
-                        // distEuclid(newNeighbor, root, d_)});
-                        // the regular ball-search is unscaled
-                        openTemp.push_back(
-                            {newNeighbor, newNeighborI,
-                                distEuclid(newNeighbor, root, d_)});
-                    }
-                }
-            }
-        }
-    }
 }
 
 #pragma endregion the algorithm

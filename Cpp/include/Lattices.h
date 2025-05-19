@@ -17,14 +17,15 @@
 #include <map>
 #include <Eigen/Dense>
 
-enum LatticeType {
-    Zn,
-    DnStar,
-    AnStar,
-    File
-};
 
 namespace Lattices {
+    enum LatticeType {
+        Zn,
+        DnStar,
+        AnStar,
+        File
+    };
+
     class Lattice {
     public:
         Lattice(int dim, double delta, double epsilon, LatticeType type);

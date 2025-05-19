@@ -204,7 +204,7 @@ namespace ompl
                 connectionFilter_ = connectionFilter;
             }
 
-            void setDeterministicType(const LatticeType &type, const int &dim, const std::string &sampleFilePath = "")
+            void setDeterministicType(const Lattices::LatticeType &type, const int &dim, const std::string &sampleFilePath = "")
             {
                 sampleType_ = type;
                 sampleFilePath_ = sampleFilePath;
@@ -377,7 +377,7 @@ namespace ompl
 
             // TODO my vars
             pthread_mutex_t samplerLock_ = PTHREAD_MUTEX_INITIALIZER;
-            LatticeType sampleType_;
+            Lattices::LatticeType sampleType_;
             int d_;
             std::string sampleFilePath_;
             // std::shared_ptr<Lattices::SampleLimitTerminationCondition> sptc_;
