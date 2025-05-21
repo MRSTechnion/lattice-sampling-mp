@@ -13,7 +13,7 @@ This repository contains the code used to run the experiemnts for the paper. It 
 ## Authors
 
 - [@Itai Panasoff, Technion](https://ItaiRobotics.github.io)
-- [@Asst. Prof. Kiril Solovey, Technion](https://kirilsol.github.io/)
+- [@Kiril Solovey, Technion](https://kirilsol.github.io/)
 
 We are both from the [@MRS lab](https://mrstechnion.github.io/) at the Technion.
 
