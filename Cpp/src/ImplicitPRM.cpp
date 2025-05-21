@@ -63,7 +63,7 @@
 #include "NTL/mat_ZZ.h"
 #include "NTL/mat_RR.h"
 
-#include "flint/flint.h"
+// #include "flint/flint.h"
 
 namespace ob = ompl::base;
 using namespace NTL;

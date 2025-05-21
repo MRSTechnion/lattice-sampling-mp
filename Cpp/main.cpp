@@ -1059,25 +1059,25 @@ std::vector<TestData> getTests() {
     std::vector<TestData> lattice_tests;
 
     /// d=6
-    // lattice_tests.push_back(bugtrapT1B); // checked 19.01
-    // lattice_tests.push_back(bugtrapT2); // checked 19.01
-    // lattice_tests.push_back(bugtrapT2B); // checked 19.01
-    // lattice_tests.push_back(bugtrapT3); // checked 19.01
-    // lattice_tests.push_back(bugtrapT5); // checked 19.01
-    // lattice_tests.push_back(bugtrapT6); // checked 19.01
-    // lattice_tests.push_back(bugtrapT8); // checked 19.01
-    // lattice_tests.push_back(bugtrapT8B); // checked 19.01
-    // lattice_tests.push_back(bugtrapT11); // checked 19.01 No Zn
+    // lattice_tests.push_back(bugtrapT1B);
+    // lattice_tests.push_back(bugtrapT2);
+    // lattice_tests.push_back(bugtrapT2B);
+    // lattice_tests.push_back(bugtrapT3);
+    // lattice_tests.push_back(bugtrapT5);
+    // lattice_tests.push_back(bugtrapT6);
+    // lattice_tests.push_back(bugtrapT8);
+    // lattice_tests.push_back(bugtrapT8B);
+    // lattice_tests.push_back(bugtrapT11);
 
-    lattice_tests.push_back(kennyT1); // checked 19.01
+    lattice_tests.push_back(kennyT1);
 
-    // lattice_tests.push_back(UniqueMaze1); // checked 19.01
-    // lattice_tests.push_back(UniqueMaze2); // checked 19.01
-    // lattice_tests.push_back(UniqueMaze4B3); // checked 19.01
-    // lattice_tests.push_back(UniqueMaze5); // checked 19.01
+    // lattice_tests.push_back(UniqueMaze1);
+    // lattice_tests.push_back(UniqueMaze2);
+    // lattice_tests.push_back(UniqueMaze4B3);
+    // lattice_tests.push_back(UniqueMaze5);
 
 
-    // lattice_tests.push_back(UniqueMaze3); // checked 19.01
+    // lattice_tests.push_back(UniqueMaze3);
 
     // make sure its nice and ordered
     std::sort(lattice_tests.begin(), lattice_tests.end(),
@@ -2612,22 +2612,19 @@ void handler(int sig) {
 int main(int argc, char **) {
     signal(SIGSEGV, handler);   // install our handler
 
-    // iLPRM2D(ompl::geometric::ImplicitPRM::LatticeType::Lc, "/usr/local/share/ompl/resources/2D/kenny_env.dae", "K1",
-        // 3, { 1, 1, -2}, {-2, 2, 0}, 0.0000001, 10, false);
-
     // Available maps: H_planar_env, UniqueSolutionMaze_env, RandomPolygons_planar_env, kenny_env, BugTrap_planar_env, BoundingBox_planar_env,
     // BoundingBox_for_four, BugTrap_planar_env, room1
 
     std::string folderBase = getUniqueTestFolder();
 
+    // AnstarVSprmstar(folderBase); // old, no for use
     /// Comparative test sets
-    // AnstarVSprmstar(folderBase);
     compareLatticesToEachother(folderBase);
-    // calibrateLattices(folderBase);
-    // AnstarVSImplicitPRM(folderBase);
+    AnstarVSImplicitPRM(folderBase);
+    calibrateLattices(folderBase);
 
     /// Vamp tests
     VAMPTests::runVampTests(argc, folderBase);
     /// counting samples
-    // findNumberOfSamples();
+    findNumberOfSamples();
 }
