@@ -1,7 +1,10 @@
 
 # Effective Sampling for Robot Motion Planning Through the Lens of Lattices
 
-This repository contains the code used to run the experiemnts for the paper named above.
+This repository contains the code used to run the experiemnts for the paper. It was accepted to RSS 2025, and this version contains the sum of work that this paper included.
+
+* [RSS 2025](https://roboticsconference.org/program/papers/48/).
+* [ArXiv](https://arxiv.org/abs/2502.04908)
 
 | ![UM_scenarios.png](https://github.com/user-attachments/assets/e3f8765f-6441-442c-9174-8381a05413dc) | ![sleeve_manipulator.png](https://github.com/user-attachments/assets/3ed5eccc-fe39-4ced-ac05-c54a0aeeb45d) |
 |:--:|:--:|
