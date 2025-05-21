@@ -63,6 +63,12 @@ To successfully run the code (as tested on Linux), several things are needed.
 
 * NTL: The [Number-Theory Library](https://libntl.org/) is used in the project for some operations (like Cholesky decomposition) we were considering for the paper, but didn't use in the end. Still, it is included an needed, as it is a baseline for future work on the matter.
 
+### Features
+
+* Explicit construction of the lattices in the paper (see the `CreateLatticeParameters()` function in `ImplicitPRM.cpp`). 
+* The iA* algorithm as used on lattices (see the `constructSolutionImplicitlyLattice(..)` function in `ImplicitPRM.cpp`).
+* Testing both on a manipulator model (see the `VAMPTests.h/cpp` files) and on multiple-moving-disks scenarios (see the `implicit_PRM_2D_multi(..)` function).
+
 ### Usage/Examples
 
 The code contains two parts. 
