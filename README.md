@@ -43,25 +43,17 @@ while advancing the practical applicability of sampling-based
 motion planning.
 
 ## Code
-### Prerequisits
+### Prerequisites
 
 To successfully run the code (as tested on Linux), several things are needed.
 
-* OMPL: The [open motion-planning library](https://ompl.kavrakilab.org/) is the motion planning framework with which we write the tests. Follow the instructions on the site to install it. Afterwards, go to the CMakeLists file in the code project and change the line:
-    
-    `include_directories("/home/itai/ompl/ompl-1.6.0/src/ompl/")`
+* OMPL: The [open motion-planning library](https://ompl.kavrakilab.org/) is the motion planning framework with which we write the tests. Follow the instructions on the site to install it.
 
-    so that it fits where you installed it.
-
-* VAMP: The [VAMP](https://github.com/KavrakiLab/vamp) repo implements extremely quick manipulator planning. We showcase it in the paper, and so it is needed in the project. Follow the instructions to install it. Afterwards, go to the CMakeLists file in the code project and change the line:
-    
-    `target_include_directories(OmplLattices PRIVATE /home/itai/VAMP/vamp/build/_deps/pdqsort-src)`
-
-    so that it fits where you installed it. This solves some error in compiling the code (you are welcome to just solve it!).
+* VAMP: The [VAMP](https://github.com/KavrakiLab/vamp) repo implements extremely quick manipulator planning. We showcase it in the paper, and so it is needed in the project. Follow the instructions to install it. 
 
 * Eigen3: [Eigen](https://eigen.tuxfamily.org/index.php?title=Main_Page) is a C++ library for performing linear-algebra operations. Installing shouldn't be an issue here.
 
-* NTL: The [Number-Theory Library](https://libntl.org/) is used in the project for some operations (like Cholesky decomposition) we were considering for the paper, but didn't use in the end. Still, it is included an needed, as it is a baseline for future work on the matter.
+* NTL: The [Number-Theory Library](https://libntl.org/) is used in the project for some operations (like Cholesky decomposition) we were considering for the paper, but didn't use in the end. Still, it is included and needed, as it is a baseline for future work on the matter.
 
 ### Features
 
