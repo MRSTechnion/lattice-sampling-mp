@@ -1,16 +1,19 @@
 
 # Effective Sampling for Robot Motion Planning Through the Lens of Lattices
 
-This repository contains the code used to run the experiemnts for the paper named above.
+This repository contains the code used to run the experiments for the paper. It was accepted to RSS 2025, and this version contains the sum of work that this paper included.
+
+* [RSS 2025](https://roboticsconference.org/program/papers/48/).
+* [ArXiv](https://arxiv.org/abs/2502.04908)
 
 | ![UM_scenarios.png](https://github.com/user-attachments/assets/e3f8765f-6441-442c-9174-8381a05413dc) | ![sleeve_manipulator.png](https://github.com/user-attachments/assets/3ed5eccc-fe39-4ced-ac05-c54a0aeeb45d) |
 |:--:|:--:|
-| *Example scenario from the paper with multiple shifting disks in a maze. Implemented in OMPL.* | *Using a custom VAMP scenario to test the* $A_d^*$ *lattice.*  |
+| *Example scenario with multiple translated disks in a maze. Implemented in OMPL.* | * Example scenario relying on the VAMP library.*  |
 
 ## Authors
 
 - [@Itai Panasoff, Technion](https://ItaiRobotics.github.io)
-- [@Asst. Prof. Kiril Solovey, Technion](https://kirilsol.github.io/)
+- [@Kiril Solovey, Technion](https://kirilsol.github.io/)
 
 We are both from the [@MRS lab](https://mrstechnion.github.io/) at the Technion.
 
@@ -59,6 +62,12 @@ To successfully run the code (as tested on Linux), several things are needed.
 * Eigen3: [Eigen](https://eigen.tuxfamily.org/index.php?title=Main_Page) is a C++ library for performing linear-algebra operations. Installing shouldn't be an issue here.
 
 * NTL: The [Number-Theory Library](https://libntl.org/) is used in the project for some operations (like Cholesky decomposition) we were considering for the paper, but didn't use in the end. Still, it is included an needed, as it is a baseline for future work on the matter.
+
+### Features
+
+* Explicit construction of the lattices in the paper (see the `CreateLatticeParameters()` function in `ImplicitPRM.cpp`). 
+* The iA* algorithm as used on lattices (see the `constructSolutionImplicitlyLattice(..)` function in `ImplicitPRM.cpp`).
+* Testing both on a manipulator model (see the `VAMPTests.h/cpp` files) and on multiple-moving-disks scenarios (see the `implicit_PRM_2D_multi(..)` function).
 
 ### Usage/Examples
 
