@@ -2,16 +2,18 @@ cmake_minimum_required(VERSION 3.28)
 project(OmplLattices)
 
 set(CMAKE_CXX_STANDARD 23)
+## These are other considered options, left here "just in case"
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb3 -msse2 -mavx2 -mfma -fsanitize=address")
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb3 -msse2 -mavx2 -mfma -lflint -lntl -lgmp -lm")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb3 -msse2 -mavx2 -mfma -lntl -lgmp -lm")
 #set(CMAKE_CXX_FLAGS_RELEASE  "${CMAKE_CXX_FLAGS_RELEASE} -O3 -msse2 -mavx2 -mfma -fsanitize=address")
-
 #set(CMAKE_CXX_FLAGS_RELEASE  "${CMAKE_CXX_FLAGS_RELEASE} -O3 -fopenmp -msse2 -lflint -lntl -lgmp -lm")
 #set(CMAKE_CXX_FLAGS_RELEASE  "${CMAKE_CXX_FLAGS_RELEASE} -O3 -fopenmp -msse2 -mavx2 -mfma -lflint -lntl -lgmp -lm")
+
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -ggdb3 -msse2 -mavx2 -mfma -lntl -lgmp -lm")
 set(CMAKE_CXX_FLAGS_RELEASE  "${CMAKE_CXX_FLAGS_RELEASE} -O3 -fopenmp -msse2 -mavx2 -mfma -lntl -lgmp -lm")
 
-include_directories("/home/itai/ompl/ompl-1.6.0/src/ompl/")
+include_directories("resources/ompl/")
+
 add_executable(OmplLattices main.cpp
         src/Lattices.cpp
         include/Lattices.h
@@ -37,10 +39,11 @@ add_executable(OmplLattices main.cpp
         include/VAMPTests.h
 )
 
-target_include_directories(OmplLattices PRIVATE /home/itai/VAMP/vamp/build/_deps/pdqsort-src)
+target_include_directories(OmplLattices PRIVATE resources/pdqsort-src)
 
 find_package(Eigen3 CONFIG REQUIRED)
 #find_package(fmt CONFIG REQUIRED)
+
 target_link_libraries(OmplLattices PRIVATE Eigen3::Eigen)
 
 message("ompl libraries: ${OMPL_LIBRARIES}")

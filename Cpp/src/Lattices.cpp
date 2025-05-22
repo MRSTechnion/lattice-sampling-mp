@@ -110,7 +110,7 @@ struct LatticeNN {
 };
 
 template<typename T>
-struct matrix_hashI : std::unary_function<T, size_t> { // moo!!
+struct matrix_hashI : std::unary_function<T, size_t> {
     std::size_t operator()(T const& matrix) const {
         // Note that it is oblivious to the storage order of Eigen matrix (column- or
         // row-major). It will give you the same hash value for two different matrices if they
