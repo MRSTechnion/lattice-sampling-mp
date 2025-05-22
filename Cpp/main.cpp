@@ -1172,7 +1172,7 @@ std::tuple<int, double, double, signed long, signed long, double> implicit_PRM_2
 
     // custom
     // robots: cylinder, cube, cube_big, kenny_env, car1_planar_robot, UniqueSolutionMaze_robot, Barriers_easy_robot
-    std::string robot_fname = "/home/itai/ompl3/omplapp-1.6.0-Source/resources/2D/cylinder.dae";
+    std::string robot_fname = std::filesystem::current_path().string() + "/../resources/cylinder.dae";
 
     /** Model setup actions **/
 
@@ -1398,7 +1398,7 @@ std::tuple<int, double, double, signed long, signed long> general_2D_multi(const
     /** env/robot **/
 
     // robots: cylinder, cube, cube_big, kenny_env, car1_planar_robot, UniqueSolutionMaze_robot, Barriers_easy_robot
-    std::string robot_fname = "/home/itai/ompl3/omplapp-1.6.0-Source/resources/2D/cylinder.dae";
+    std::string robot_fname = std::filesystem::current_path().string() +"/../resources/cylinder.dae";
 
     /** Model setup actions **/
     setup.setEnvironmentMesh(env_fname);
@@ -1543,7 +1543,7 @@ Eigen::VectorXd getRandomStartPoint(const std::string& env_fname, int robotCount
     /** Model options (env/robot) **/
 
     // a wider cylinder (for bigger clearance)
-    std::string robot_fname = "/home/itai/ompl3/omplapp-1.6.0-Source/resources/2D/cylinder_wider.dae";
+    std::string robot_fname = std::filesystem::current_path().string() +"/../resources/cylinder_wider.dae";
 
     /** Model setup actions **/
 
